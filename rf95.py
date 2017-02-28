@@ -28,7 +28,7 @@ def spi_write(register, value):
     print "writing", value, "to register", (register | SPI_WRITE_MASK)
     send_data = str(bytearray([register | SPI_WRITE_MASK, value]))
     length, recv_data = wiringpi.wiringPiSPIDataRW(SPIchannel, send_data)
-    print "recvData", [ord(b) for b in recv_data]
+    print "recvData", [ord(b) for b in recv_data]  # no idea what the returned data contains
 
 
 class RF95Registers:
@@ -249,6 +249,7 @@ def shutdown(signum, frame):
 
 
 def reset():
+    print "Resetting RF95"
     wiringpi.digitalWrite(RST_PIN, 0)
     time.sleep(0.150)
     wiringpi.digitalWrite(RST_PIN, 1)
@@ -263,11 +264,9 @@ wiringpi.pinMode(LED_PIN, wiringpi.GPIO.OUTPUT)
 
 wiringpi.wiringPiISR(IRQ_PIN, wiringpi.GPIO.INT_EDGE_RISING, gpio_callback)
 
-print "Resetting RF95"
 reset()
 
-print "SPI"
-
+print "SPI:",
 version = spi_read(RF95Registers.version)
 if version == 0x12:
     print "found: SX1276 RF95/96"
