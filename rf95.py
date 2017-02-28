@@ -9,26 +9,26 @@ CS_PIN = 8
 IRQ_PIN = 25
 SPI_WRITE_MASK = 0x80
 
-SPIchannel = 0 #SPI Channel (CE0)
-SPIspeed = 1562500 #Clock Speed in Hz
+SPIchannel = 0  # SPI Channel (CE0)
+SPIspeed = 1562500  # Clock Speed in Hz (base 400MHz/256)
 wiringpi.wiringPiSetupGpio()
 wiringpi.wiringPiSPISetup(SPIchannel, SPIspeed)
 
 
 # working spiRead function which returns the int value of the returned register
-def spiRead(register):
-    sendData = str(bytearray([register & ~SPI_WRITE_MASK, 0x0]))
-    length, recvData = wiringpi.wiringPiSPIDataRW(SPIchannel, sendData)
+def spi_read(register):
+    send_data = str(bytearray([register & ~SPI_WRITE_MASK, 0x0]))
+    length, recv_data = wiringpi.wiringPiSPIDataRW(SPIchannel, send_data)
     if length != 2:
         raise ValueError("not enough data returned")
-    return ord(recvData[1])
+    return ord(recv_data[1])
 
 
-def spiWrite(register, value):
+def spi_write(register, value):
     print "writing", value, "to register", (register | SPI_WRITE_MASK)
-    sendData = str(bytearray([register | SPI_WRITE_MASK, value]))
-    length, recvData = wiringpi.wiringPiSPIDataRW(SPIchannel, sendData)
-    print "recvData", [ord(b) for b in recvData]
+    send_data = str(bytearray([register | SPI_WRITE_MASK, value]))
+    length, recv_data = wiringpi.wiringPiSPIDataRW(SPIchannel, send_data)
+    print "recvData", [ord(b) for b in recv_data]
 
 
 class RF95Registers:
@@ -169,14 +169,14 @@ DefaultModemConfigs = {
 def gpio_callback():
     print "GPIO_CALLBACK!", time.time()
     wiringpi.digitalWrite(LED_PIN, 1)
-    irq_flags = spiRead(RF95Registers.irq_flags)
+    irq_flags = spi_read(RF95Registers.irq_flags)
     print bin(irq_flags)
     print "RH_RF95_RX_TIMEOUT_MASK", irq_flags & 0x80 == 0x80
     print "RH_RF95_RX_DONE_MASK", irq_flags & 0x40 == 0x40
     print "RH_RF95_PAYLOAD_CRC_ERROR_MASK", irq_flags & 0x20 == 0x20
     print "RH_RF95_VALID_HEADER_MASK", irq_flags & 0x10 == 0x10
     # spiWrite(RH_RF95_REG_12_IRQ_FLAGS, 0xff); // Clear all IRQ flags
-    spiWrite(0x12, 0xff)
+    spi_write(0x12, 0xff)
     wiringpi.digitalWrite(LED_PIN, 0)
 
 
@@ -184,6 +184,7 @@ def shutdown(signum, frame):
     print "shutting down"
     reset()
     exit(0)
+
 
 def reset():
     wiringpi.digitalWrite(RST_PIN, 0)
@@ -204,7 +205,7 @@ reset()
 
 print "SPI"
 
-version = spiRead(RF95Registers.version)
+version = spi_read(RF95Registers.version)
 if version == 0x12:
     print "found: SX1276 RF95/96"
 else:
@@ -212,23 +213,25 @@ else:
     print version
     exit(1)
 
-readMode = spiRead(RF95Registers.mode)
+readMode = spi_read(RF95Registers.mode)
 print "current mode", hex(readMode), bin(readMode)
 
 print "setting mode to sleep and LoRa"
-spiWrite(RF95Registers.mode, RF95Modes.sleep | RF95Modes.loRa)
+spi_write(RF95Registers.mode, RF95Modes.sleep | RF95Modes.loRa)
 time.sleep(0.1)
 
 print "verifying mode"
-readMode = spiRead(RF95Registers.mode)
+readMode = spi_read(RF95Registers.mode)
 print hex(readMode), bin(readMode)
 print readMode == (RF95Modes.sleep | RF95Modes.loRa)
 
+
 def get_frequency():
-    msb = spiRead(RF95Registers.rf_carrier_frequency_msb)
-    mid = spiRead(RF95Registers.rf_carrier_frequency_mid)
-    lsb = spiRead(RF95Registers.rf_carrier_frequency_lsb)
+    msb = spi_read(RF95Registers.rf_carrier_frequency_msb)
+    mid = spi_read(RF95Registers.rf_carrier_frequency_mid)
+    lsb = spi_read(RF95Registers.rf_carrier_frequency_lsb)
     return (msb << 16 | mid << 8 | lsb) * (32e6 / 2**19)  # freq * 32 mhz / 2^19
+
 
 def set_frequency(frequency):
     fstep = 32e6 / 2 ** 19
@@ -237,39 +240,41 @@ def set_frequency(frequency):
     print "frf", frf
     print "msb", (frf >> 16) & 0xff
     print "mid", (frf >> 8) & 0xff
-    print "lsb", (frf) & 0xff
+    print "lsb", frf & 0xff
 
-    spiWrite(RF95Registers.rf_carrier_frequency_msb, (frf >> 16) & 0xff)
-    spiWrite(RF95Registers.rf_carrier_frequency_mid, (frf >> 8) & 0xff)
-    spiWrite(RF95Registers.rf_carrier_frequency_lsb, frf & 0xff)
+    spi_write(RF95Registers.rf_carrier_frequency_msb, (frf >> 16) & 0xff)
+    spi_write(RF95Registers.rf_carrier_frequency_mid, (frf >> 8) & 0xff)
+    spi_write(RF95Registers.rf_carrier_frequency_lsb, frf & 0xff)
+
 
 def set_mode_idle():
-    spiWrite(RF95Registers.mode, RF95Modes.standby)
+    spi_write(RF95Registers.mode, RF95Modes.standby)
+
 
 def set_modem_config(config):
     """
     :type config: ModemConfig
     """
-    #spiWrite(RH_RF95_REG_1D_MODEM_CONFIG1, config->reg_1d);
-    #spiWrite(RH_RF95_REG_1E_MODEM_CONFIG2, config->reg_1e);
-    #spiWrite(RH_RF95_REG_26_MODEM_CONFIG3, config->reg_26);
+    # spiWrite(RH_RF95_REG_1D_MODEM_CONFIG1, config->reg_1d);
+    # spiWrite(RH_RF95_REG_1E_MODEM_CONFIG2, config->reg_1e);
+    # spiWrite(RH_RF95_REG_26_MODEM_CONFIG3, config->reg_26);
     print "pre config"
-    print spiRead(RF95Registers.modem_config_1)
-    print spiRead(RF95Registers.modem_config_2)
+    print spi_read(RF95Registers.modem_config_1)
+    print spi_read(RF95Registers.modem_config_2)
     print "setting modem config"
-    spiWrite(RF95Registers.modem_config_1, config.register_1d)
-    spiWrite(RF95Registers.modem_config_2, config.register_1e)
+    spi_write(RF95Registers.modem_config_1, config.register_1d)
+    spi_write(RF95Registers.modem_config_2, config.register_1e)
     print "post config"
-    print spiRead(RF95Registers.modem_config_1)
-    print spiRead(RF95Registers.modem_config_2)
+    print spi_read(RF95Registers.modem_config_1)
+    print spi_read(RF95Registers.modem_config_2)
 
 print "set fifo addrs"
-print spiRead(RF95Registers.fifo_rx_base_addr)
-print spiRead(RF95Registers.fifo_tx_base_addr)
-spiWrite(RF95Registers.fifo_rx_base_addr, 0)
-spiWrite(RF95Registers.fifo_tx_base_addr, 0)
-print spiRead(RF95Registers.fifo_rx_base_addr)
-print spiRead(RF95Registers.fifo_tx_base_addr)
+print spi_read(RF95Registers.fifo_rx_base_addr)
+print spi_read(RF95Registers.fifo_tx_base_addr)
+spi_write(RF95Registers.fifo_rx_base_addr, 0)
+spi_write(RF95Registers.fifo_tx_base_addr, 0)
+print spi_read(RF95Registers.fifo_rx_base_addr)
+print spi_read(RF95Registers.fifo_tx_base_addr)
 
 print "read frequency"
 print get_frequency()
@@ -284,8 +289,8 @@ print get_frequency()
 set_modem_config(DefaultModemConfigs['default'])
 
 print "setting mode to RX cont"
-spiWrite(RF95Registers.mode, RF95Modes.rx_continous)
-spiWrite(RF95Registers.dio_mapping_g0, 0x00)  # RxDone
+spi_write(RF95Registers.mode, RF95Modes.rx_continous)
+spi_write(RF95Registers.dio_mapping_g0, 0x00)  # RxDone
 
 print "waiting"
 signal.pause()
