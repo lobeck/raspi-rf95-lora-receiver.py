@@ -259,6 +259,7 @@ signal.signal(signal.SIGINT, shutdown)
 wiringpi.pinMode(IRQ_PIN, wiringpi.GPIO.INPUT)
 wiringpi.pullUpDnControl(IRQ_PIN, wiringpi.GPIO.PUD_DOWN)
 wiringpi.pinMode(RST_PIN, wiringpi.GPIO.OUTPUT)
+wiringpi.pinMode(LED_PIN, wiringpi.GPIO.OUTPUT)
 
 wiringpi.wiringPiISR(IRQ_PIN, wiringpi.GPIO.INT_EDGE_RISING, gpio_callback)
 
