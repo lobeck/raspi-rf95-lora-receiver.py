@@ -24,6 +24,13 @@ def spi_read(register):
     return ord(recv_data[1])
 
 
+def spi_burst_read(register, length):
+    data = []
+    for _ in range(0, length - 1):
+        data.append(spi_read(register))
+    return data
+
+
 def spi_write(register, value):
     print "writing", value, "to register", (register | SPI_WRITE_MASK)
     send_data = str(bytearray([register | SPI_WRITE_MASK, value]))
@@ -45,10 +52,19 @@ class RF95Registers:
     # RH_RF95_REG_08_FRF_LSB                             0x08
     rf_carrier_frequency_lsb = 0x08
 
+    # RH_RF95_REG_0D_FIFO_ADDR_PTR                       0x0d
+    fifo_spi_address_pointer = 0x0d
     # RH_RF95_REG_0E_FIFO_TX_BASE_ADDR                   0x0e
     fifo_tx_base_addr = 0x0e
     # RH_RF95_REG_0F_FIFO_RX_BASE_ADDR                   0x0f
     fifo_rx_base_addr = 0x0f
+
+    # RH_RF95_REG_10_FIFO_RX_CURRENT_ADDR                0x10
+    # Start address (in data buffer) of last packet received
+    fifo_last_packet_address = 0x10
+
+    # RH_RF95_REG_13_RX_NB_BYTES FifoNbRxBytes           0x13
+    last_packet_payload_bytes = 0x13
 
     # RH_RF95_REG_1D_MODEM_CONFIG1                       0x1d
     modem_config_1 = 0x1d
@@ -231,12 +247,49 @@ class RF95Interrupt:
         return " | ".join(result)
 
 
+class LoRaPacketHeader:
+
+    def __init__(self, data):
+        """
+        :param data: the header (4 bytes)
+        :type data: []int
+        """
+        if len(data) != 4:
+            raise ValueError("header needs to be 4 bytes")
+
+        self.source, self.dest, self.id, self.flags = data
+
+    def __str__(self):
+        return "LoRaPacketHeader(source={}, dest={}, id={}, flags={})".format(self.source, self.dest, self.id, self.flags)
+
+
 def gpio_callback():
     print "GPIO_CALLBACK!", time.time()
     wiringpi.digitalWrite(LED_PIN, 1)
     irq_flags = spi_read(RF95Registers.irq_flags)
     result = RF95Interrupt(irq_flags)
     print result
+
+    if result.rx_done():
+        # // Have received a packet
+        # uint8_t len = spiRead(RH_RF95_REG_13_RX_NB_BYTES);
+        packet_length = spi_read(RF95Registers.last_packet_payload_bytes)
+        print "last packet length", packet_length
+
+        # // Reset the fifo read ptr to the beginning of the packet
+        # spiWrite(RH_RF95_REG_0D_FIFO_ADDR_PTR, spiRead(RH_RF95_REG_10_FIFO_RX_CURRENT_ADDR));
+        last_packet_buffer_address = spi_read(RF95Registers.fifo_last_packet_address)
+        print "last packet address", last_packet_buffer_address
+        spi_write(RF95Registers.fifo_spi_address_pointer, last_packet_buffer_address)
+        print "reading data",
+        data = spi_burst_read(0x00, packet_length)
+        print data
+        header = LoRaPacketHeader(data[:4])
+        print header
+        print "data", "".join([chr(x) for x in data[4:]])
+        print "resetting address pointer"
+        spi_write(RF95Registers.fifo_last_packet_address, 0x00)
+
     # spiWrite(RH_RF95_REG_12_IRQ_FLAGS, 0xff); // Clear all IRQ flags
     spi_write(0x12, 0xff)
     wiringpi.digitalWrite(LED_PIN, 0)
