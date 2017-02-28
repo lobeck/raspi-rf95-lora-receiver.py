@@ -1,3 +1,4 @@
+import signal
 import wiringpi
 import time
 
@@ -178,17 +179,28 @@ def gpio_callback():
     spiWrite(0x12, 0xff)
     wiringpi.digitalWrite(LED_PIN, 0)
 
+
+def shutdown(signum, frame):
+    print "shutting down"
+    reset()
+    exit(0)
+
+def reset():
+    wiringpi.digitalWrite(RST_PIN, 0)
+    time.sleep(0.150)
+    wiringpi.digitalWrite(RST_PIN, 1)
+    time.sleep(0.1)
+
+signal.signal(signal.SIGINT, shutdown)
+
 wiringpi.pinMode(IRQ_PIN, wiringpi.GPIO.INPUT)
-wiringpi.pullUpDnControl(IRQ_PIN, wiringpi.GPIO.PUD_UP)
+wiringpi.pullUpDnControl(IRQ_PIN, wiringpi.GPIO.PUD_DOWN)
+wiringpi.pinMode(RST_PIN, wiringpi.GPIO.OUTPUT)
 
 wiringpi.wiringPiISR(IRQ_PIN, wiringpi.GPIO.INT_EDGE_RISING, gpio_callback)
 
 print "Resetting RF95"
-wiringpi.pinMode(RST_PIN, wiringpi.GPIO.OUTPUT)
-wiringpi.digitalWrite(RST_PIN, 0)
-time.sleep(0.150)
-wiringpi.digitalWrite(RST_PIN, 1)
-time.sleep(0.1)
+reset()
 
 print "SPI"
 
@@ -275,4 +287,5 @@ print "setting mode to RX cont"
 spiWrite(RF95Registers.mode, RF95Modes.rx_continous)
 spiWrite(RF95Registers.dio_mapping_g0, 0x00)  # RxDone
 
-print input("blubb")
+print "waiting"
+signal.pause()
