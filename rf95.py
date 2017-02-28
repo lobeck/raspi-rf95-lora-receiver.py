@@ -287,8 +287,6 @@ def gpio_callback():
         header = LoRaPacketHeader(data[:4])
         print header
         print "data", "".join([chr(x) for x in data[4:]])
-        print "resetting address pointer"
-        spi_write(RF95Registers.fifo_last_packet_address, 0x00)
 
     # spiWrite(RH_RF95_REG_12_IRQ_FLAGS, 0xff); // Clear all IRQ flags
     spi_write(0x12, 0xff)
