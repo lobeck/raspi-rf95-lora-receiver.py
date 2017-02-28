@@ -15,6 +15,15 @@ wiringpi.wiringPiSetupGpio()
 wiringpi.wiringPiSPISetup(SPIchannel, SPIspeed)
 
 
+def twos_complement(input_value, num_bits):
+    """
+        Calculates a two's complement integer from the given input value's bits
+        Copied from wikipedia: https://en.wikipedia.org/wiki/Two's_complement
+    """
+    mask = 2**(num_bits - 1)
+    return -(input_value & mask) + (input_value & ~mask)
+
+
 # working spiRead function which returns the int value of the returned register
 def spi_read(register):
     send_data = str(bytearray([register & ~SPI_WRITE_MASK, 0x0]))
@@ -32,10 +41,9 @@ def spi_burst_read(register, length):
 
 
 def spi_write(register, value):
-    print "writing", value, "to register", (register | SPI_WRITE_MASK)
     send_data = str(bytearray([register | SPI_WRITE_MASK, value]))
     length, recv_data = wiringpi.wiringPiSPIDataRW(SPIchannel, send_data)
-    print "recvData", [ord(b) for b in recv_data]  # no idea what the returned data contains
+    return ord(recv_data[1])  # let's return the return value, probably it's the previous one or whatever
 
 
 class RF95Registers:
@@ -65,7 +73,19 @@ class RF95Registers:
 
     # RH_RF95_REG_13_RX_NB_BYTES FifoNbRxBytes           0x13
     last_packet_payload_bytes = 0x13
+    # RH_RF95_REG_14_RX_HEADER_CNT_VALUE_MSB             0x14
+    valid_header_count_msb = 0x14
+    # RH_RF95_REG_15_RX_HEADER_CNT_VALUE_LSB             0x15
+    valid_header_count_lsb = 0x15
+    # RH_RF95_REG_16_RX_PACKET_CNT_VALUE_MSB             0x16
+    valid_packet_count_msb = 0x16
+    # RH_RF95_REG_17_RX_PACKET_CNT_VALUE_LSB             0x17
+    valid_packet_count_lsb = 0x17
 
+    # RH_RF95_REG_19_PKT_SNR_VALUE                       0x19
+    last_packet_snr = 0x19
+    # RH_RF95_REG_1A_PKT_RSSI_VALUE                      0x1a
+    last_packet_rssi = 0x1a
     # RH_RF95_REG_1D_MODEM_CONFIG1                       0x1d
     modem_config_1 = 0x1d
     # RH_RF95_REG_1E_MODEM_CONFIG2                       0x1e
@@ -287,6 +307,14 @@ def gpio_callback():
         header = LoRaPacketHeader(data[:4])
         print header
         print "data", "".join([chr(x) for x in data[4:]])
+
+        print "valid headers", (spi_read(RF95Registers.valid_header_count_msb) << 8 | spi_read(RF95Registers.valid_header_count_lsb))
+        print "valid packets", (spi_read(RF95Registers.valid_packet_count_msb) << 8 | spi_read(RF95Registers.valid_packet_count_lsb))
+        # Estimation of SNR on last packet received.In two's compliment format mutiplied(sic!) by 4.
+        print "last packet SNR", twos_complement(spi_read(RF95Registers.last_packet_snr) & ~0x80, 7) / 4
+        print "last packet RSSI", -137 + spi_read(RF95Registers.last_packet_rssi)
+        print spi_read(0x1c)
+        print "crc on", spi_read(0x1c) & 0x20 == 0x20
 
     # spiWrite(RH_RF95_REG_12_IRQ_FLAGS, 0xff); // Clear all IRQ flags
     spi_write(0x12, 0xff)
