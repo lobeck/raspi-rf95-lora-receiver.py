@@ -166,15 +166,77 @@ DefaultModemConfigs = {
 }
 
 
+class RF95Interrupt:
+
+    def __init__(self, value):
+        """
+
+        :param value: the contents of the interrupt register
+        :type value: int
+        """
+        self.value = value
+
+    def valid(self):
+        # strangely, the second received interrupt is empty
+        return self.value != 0x0
+
+    def timeout(self):
+        # RH_RF95_RX_TIMEOUT_MASK
+        return self.value & 0x80 == 0x80
+
+    def rx_done(self):
+        return self.value & 0x40 == 0x40
+
+    def payload_crc_error(self):
+        return self.value & 0x20 == 0x20
+
+    def valid_header(self):
+        return self.value & 0x10 == 0x10
+
+    def tx_done(self):
+        return self.value & 0x08 == 0x08
+
+    def cad_done(self):
+        return self.value & 0x04 == 0x04
+
+    def fhss_channel_change(self):
+        return self.value & 0x02 == 0x02
+
+    def cad_detected(self):
+        return self.value & 0x01 == 0x01
+
+    def __str__(self):
+        result = []
+        if not self.valid():
+            result.append("INVALID_INTERRUPT")
+        if self.timeout():
+            result.append("TIMEOUT")
+        if self.rx_done():
+            result.append("RX_DONE")
+        if self.payload_crc_error():
+            result.append("CRC_ERROR")
+        if self.valid_header():
+            result.append("VALID_HEADER")
+        if self.tx_done():
+            result.append("TX_DONE")
+        if self.cad_done():
+            result.append("CAD_DONE")
+        if self.fhss_channel_change():
+            result.append("FHSS_CHANNEL_CHANGE")
+        if self.cad_detected():
+            result.append("CAD_DETECTED")
+        if self.cad_done() and not self.cad_detected():
+            result.append("CAD_CLEAR")
+
+        return " | ".join(result)
+
+
 def gpio_callback():
     print "GPIO_CALLBACK!", time.time()
     wiringpi.digitalWrite(LED_PIN, 1)
     irq_flags = spi_read(RF95Registers.irq_flags)
-    print bin(irq_flags)
-    print "RH_RF95_RX_TIMEOUT_MASK", irq_flags & 0x80 == 0x80
-    print "RH_RF95_RX_DONE_MASK", irq_flags & 0x40 == 0x40
-    print "RH_RF95_PAYLOAD_CRC_ERROR_MASK", irq_flags & 0x20 == 0x20
-    print "RH_RF95_VALID_HEADER_MASK", irq_flags & 0x10 == 0x10
+    result = RF95Interrupt(irq_flags)
+    print result
     # spiWrite(RH_RF95_REG_12_IRQ_FLAGS, 0xff); // Clear all IRQ flags
     spi_write(0x12, 0xff)
     wiringpi.digitalWrite(LED_PIN, 0)
