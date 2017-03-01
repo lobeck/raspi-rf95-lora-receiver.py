@@ -313,8 +313,6 @@ def gpio_callback():
         # Estimation of SNR on last packet received.In two's compliment format mutiplied(sic!) by 4.
         print "last packet SNR", twos_complement(spi_read(RF95Registers.last_packet_snr) & ~0x80, 7) / 4
         print "last packet RSSI", -137 + spi_read(RF95Registers.last_packet_rssi)
-        print spi_read(0x1c)
-        print "crc on", spi_read(0x1c) & 0x20 == 0x20
 
     # spiWrite(RH_RF95_REG_12_IRQ_FLAGS, 0xff); // Clear all IRQ flags
     spi_write(0x12, 0xff)
